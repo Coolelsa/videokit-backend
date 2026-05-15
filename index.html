@@ -243,12 +243,12 @@ footer{border-top:1px solid var(--br);padding:20px 0 28px;margin-top:auto}
 <div class="tw" id="tw"></div>
 
 <script>
-const BACKEND_URL = "https://coolelsa-videokit-backend.hf.space"; // ← 換成你的 URL
+const BACKEND_URL = "https://coolelsa-videokit-backend.hf.space"; // 後端
 
 let burl=null, bname='';
 const SPEEDS=[0.25,0.5,0.75,1,1.25,1.5,2,3];
 let plat=null;
-const NOTES={youtube:'如遇 Bot 偵測，後端加 cookies 可解。',instagram:'私人帳號需提供帳戶 cookies。',tiktok:'部分地區需 cookies 繞過限制。'};
+const NOTES={youtube:'如遇 Bot 偵測，後端加 cookies 可解。',tiktok:'部分地區需 cookies 繞過限制。'};
 
 function api(){const v=BACKEND_URL.trim().replace(/\/$/,'');if(!v||v.includes('your-app'))throw new Error('後端 URL 未設定');return v;}
 
@@ -293,7 +293,18 @@ function onU(val){
   else if(/instagram\.com/.test(val)){p='Instagram';c='b-blue';plat='instagram';}
   else if(/tiktok\.com/.test(val)){p='TikTok';c='b-gold';plat='tiktok';}
   else if(/twitter\.com|x\.com/.test(val)){p='X / Twitter';c='b-blue';}
-  if(p){pb.style.display='block';pb.innerHTML=`<span class="badge ${c}">● ${p} 偵測到</span>`;}
+  if(p){
+    pb.style.display='block';
+    let extra = '';
+    if(plat==='instagram'){
+      extra = `<a href="https://saveclip.app/zh-tw?url=${encodeURIComponent(val)}"
+        target="_blank" rel="noopener"
+        style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:14px 20px;background:var(--acc);border:none;border-radius:var(--r);font-family:var(--sans);font-size:16px;font-weight:800;color:#000;cursor:pointer;text-decoration:none;width:100%;justify-content:center;box-shadow:0 0 16px rgba(240,184,0,.28);">
+        ↗ 用 SaveClip 下載 Instagram 影片
+      </a>`;
+    }
+    pb.innerHTML=`<span class="badge ${c}">● ${p} 偵測到</span>${extra}`;
+  }
 }
 
 async function gi(){
@@ -367,7 +378,7 @@ async function dlV(){
 
 // ── 存檔：優先跳出「另存新檔」對話框 ──────────────────────────────────────
 async function saveFile(blob, filename, mimeType) {
-  // 桌機/Android Chrome：跳出「另存新檔」對話框
+  // 桌機 Chrome：跳出「另存新檔」對話框
   if ('showSaveFilePicker' in window) {
     try {
       const ext    = filename.split('.').pop();
@@ -382,26 +393,36 @@ async function saveFile(blob, filename, mimeType) {
       return;
     } catch(e) {
       if (e.name === 'AbortError') return;
+      // 不支援就繼續往下
     }
   }
 
-  // iOS：用分享選單（可選「存到相簿」或「存到檔案」）
-  const file = new File([blob], filename, { type: mimeType });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return;
-    } catch(e) {
-      if (e.name === 'AbortError') return;
+  // iOS Safari：強制用 Web Share API（可直接「存到相簿」）
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) {
+    const file = new File([blob], filename, { type: mimeType });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        toast('請在分享選單選「儲存影片」存到相簿 ✓', 'success', 6000);
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+      }
     }
+    // iOS 但 Share API 不支援 → 開新分頁讓用戶長按存
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    toast('影片已開啟 → 長按影片 → 選「存到相簿」', 'success', 8000);
+    return;
   }
 
-  // Fallback：自動下載
+  // Android / 其他：anchor 下載
   const url = URL.createObjectURL(blob);
   const a   = document.createElement('a');
   a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-  toast('已下載 → 開「檔案 App」→「下載項目」', 'success');
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('下載完成 ✓', 'success');
 }
 
 function fmtD(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`:`${m}:${String(ss).padStart(2,'0')}`;}
