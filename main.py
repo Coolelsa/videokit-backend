@@ -7,14 +7,15 @@ import os
 import uuid
 import tempfile
 import asyncio
+import subprocess
 from pathlib import Path
 from functools import partial
 
 import yt_dlp
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 
 # ── 設定 ──────────────────────────────────────────────────────────────────────
@@ -119,6 +120,21 @@ def cleanup_file(path: str):
         pass
 
 
+def build_atempo(speed: float) -> str | None:
+    """建立 FFmpeg atempo 濾鏡鏈（atempo 只支援 0.5–2.0，超出範圍需串接）"""
+    filters = []
+    s = speed
+    while s > 2.0:
+        filters.append("atempo=2.0")
+        s /= 2.0
+    while s < 0.5:
+        filters.append("atempo=0.5")
+        s *= 2.0
+    if abs(s - 1.0) > 0.001:
+        filters.append(f"atempo={s:.6f}")
+    return ",".join(filters) if filters else None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -183,4 +199,66 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
         media_type=media_type,
         filename=filename,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/speed")
+async def change_speed(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    speed: float = Form(...),
+):
+    """
+    接收影片檔案 + 速度倍率，用 FFmpeg 重新編碼後回傳
+    支援 0.1x – 4x，音訊自動串接 atempo 濾鏡鏈
+    """
+    if not (0.1 <= speed <= 4.0):
+        raise HTTPException(status_code=422, detail="speed 需介於 0.1 – 4.0")
+
+    job_id   = uuid.uuid4().hex
+    suffix   = Path(file.filename or "input.mp4").suffix or ".mp4"
+    in_path  = str(TEMP_DIR / f"{job_id}_in{suffix}")
+    out_path = str(TEMP_DIR / f"{job_id}_out.mp4")
+
+    # 寫入上傳的檔案
+    content = await file.read()
+    with open(in_path, "wb") as f:
+        f.write(content)
+
+    # 建立 FFmpeg 指令
+    vf = f"setpts={1/speed:.6f}*PTS"
+    af = build_atempo(speed)
+
+    cmd = ["ffmpeg", "-y", "-i", in_path, "-vf", vf]
+    if af:
+        cmd += ["-af", af]
+    cmd += ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", out_path]
+
+    try:
+        loop = asyncio.get_event_loop()
+        proc = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(cmd, capture_output=True, timeout=300),
+        )
+        if proc.returncode != 0:
+            err = proc.stderr.decode(errors="ignore")[-500:]
+            raise HTTPException(status_code=500, detail=f"FFmpeg 失敗：{err}")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="編碼逾時（超過 5 分鐘）")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        background_tasks.add_task(cleanup_file, in_path)
+
+    base     = Path(file.filename or "video").stem
+    out_name = f"{base}_{speed}x.mp4"
+    background_tasks.add_task(cleanup_file, out_path)
+
+    return FileResponse(
+        path=out_path,
+        media_type="video/mp4",
+        filename=out_name,
+        headers={"Content-Disposition": f'attachment; filename="{out_name}"'},
     )
