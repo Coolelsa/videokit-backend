@@ -56,6 +56,14 @@ def build_ydl_opts(output_path: str, fmt: str) -> dict:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "socket_timeout": 30,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Version/17.4 Mobile/15E148 Safari/604.1"
+            ),
+        },
     }
 
     format_map = {
@@ -86,7 +94,19 @@ def build_ydl_opts(output_path: str, fmt: str) -> dict:
 
 def _fetch_info(url: str) -> dict:
     """同步執行，放進 thread pool 避免 block event loop"""
-    opts = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 30,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Version/17.4 Mobile/15E148 Safari/604.1"
+            ),
+        },
+    }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return {
@@ -99,7 +119,7 @@ def _fetch_info(url: str) -> dict:
                 {"id": f["format_id"], "ext": f.get("ext"), "height": f.get("height")}
                 for f in info.get("formats", [])
                 if f.get("vcodec") != "none"
-            ][-10:],  # 只回傳最後 10 個格式避免 payload 過大
+            ][-10:],
         }
 
 
@@ -232,7 +252,16 @@ async def change_speed(
     cmd = ["ffmpeg", "-y", "-i", in_path, "-vf", vf]
     if af:
         cmd += ["-af", af]
-    cmd += ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", out_path]
+    cmd += [
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-pix_fmt", "yuv420p",      # iOS Photos 必要
+        "-profile:v", "main",        # iOS 相容性
+        "-movflags", "+faststart",   # 串流優化
+        "-c:a", "aac",
+        "-b:a", "128k",
+        out_path
+    ]
 
     try:
         loop = asyncio.get_event_loop()
@@ -262,3 +291,34 @@ async def change_speed(
         filename=out_name,
         headers={"Content-Disposition": f'attachment; filename="{out_name}"'},
     )
+
+
+@app.get("/api/proxy")
+async def proxy_download(url: str, background_tasks: BackgroundTasks):
+    """
+    代理下載：繞過前端 CORS 限制
+    用於下載 Instagram CDN 影片後回傳給前端
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            r = await client.get(url, headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                    "Version/17.4 Mobile/15E148 Safari/604.1"
+                )
+            })
+            r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"代理下載失敗：{str(e)}")
+
+    # 寫入暫存再回傳（Stream 方式避免記憶體爆炸）
+    job_id  = uuid.uuid4().hex
+    tmp     = str(TEMP_DIR / f"{job_id}.mp4")
+    with open(tmp, "wb") as f:
+        f.write(r.content)
+
+    background_tasks.add_task(cleanup_file, tmp)
+    return FileResponse(tmp, media_type="video/mp4", filename="instagram_video.mp4",
+                        headers={"Content-Disposition": 'attachment; filename="instagram_video.mp4"'})
