@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoKit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:       #f5f4f0;
+  --s1:       #ffffff;
+  --s2:       #edece8;
+  --s3:       #e2e0d8;
+  --br:       #dddbd2;
+  --br2:      #c8c6bc;
+  --t1:       #18170f;
+  --t2:       #6b6960;
+  --t3:       #aaa89e;
+  --accent:   #c57f09;
+  --accent-d: rgba(197,127,9,.09);
+  --accent-b: rgba(197,127,9,.28);
+  --red:      #c92a2a;
+  --red-d:    rgba(201,42,42,.08);
+  --green:    #2f9e44;
+  --blue:     #1971c2;
+  --blue-d:   rgba(25,113,194,.09);
+  --radius:   8px;
+  --radius-lg:12px;
+  --mono:     'DM Mono', 'Courier New', monospace;
+  --display:  'Bebas Neue', sans-serif;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--mono);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-rows:60px 1fr;height:100vh;overflow:hidden}
+.header{display:flex;align-items:center;border-bottom:1px solid var(--br);padding:0 24px;justify-content:space-between;background:var(--s1);box-shadow:0 1px 0 var(--br);gap:12px}
+.logo{font-family:var(--display);font-size:30px;letter-spacing:.04em;color:var(--t1);line-height:1;flex-shrink:0}
+.logo span{color:var(--accent)}
+.header-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.api-label{font-size:13px;color:var(--t2);white-space:nowrap}
+.main{display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+
+/* ── Panels ── */
+.panel{padding:28px;overflow-y:auto;border-right:1px solid var(--br);background:var(--s1)}
+.panel-label{font-size:12px;color:var(--t3);letter-spacing:.12em;margin-bottom:18px}
+
+/* ── Tabs ── */
+.tabs{display:flex;border:1px solid var(--br);border-radius:var(--radius);overflow:hidden;width:fit-content;margin-bottom:22px}
+.tab{padding:10px 22px;font-size:14px;font-family:var(--mono);background:transparent;color:var(--t2);border:none;cursor:pointer;transition:all .15s;letter-spacing:.03em;min-height:44px}
+.tab.active{background:var(--accent-d);color:var(--accent);border-right:1px solid var(--accent-b)}
+.tab:last-child.active{border-right:none}
+.tab:not(.active):hover{color:var(--t1);background:var(--s3)}
+
+/* ── Form elements ── */
+input[type=text],input[type=url]{
+  width:100%;background:var(--s1);border:1px solid var(--br);border-radius:var(--radius);
+  color:var(--t1);font-family:var(--mono);font-size:15px;padding:12px 16px;
+  outline:none;transition:border-color .15s;min-height:48px;
+}
+input[type=text]:focus,input[type=url]:focus{border-color:var(--accent)}
+input[type=text]::placeholder,input[type=url]::placeholder{color:var(--t3)}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:5px;
+  background:var(--s3);border-radius:3px;outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--accent);cursor:pointer;
+  box-shadow:0 0 0 4px var(--accent-d);transition:box-shadow .15s;
+}
+input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 0 7px var(--accent-d)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 20px;border-radius:var(--radius);font-family:var(--mono);font-size:14px;cursor:pointer;border:1px solid var(--br);background:transparent;color:var(--t1);transition:all .15s;letter-spacing:.03em;white-space:nowrap;min-height:44px}
+.btn:hover{border-color:var(--br2);background:var(--s2)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+.btn-accent:hover{background:#a86c05;border-color:#a86c05}
+.btn-sm{padding:8px 14px;font-size:13px;min-height:38px}
+.btn-full{width:100%}
+.btn-ghost{border-color:transparent;color:var(--t2)}
+.btn-ghost:hover{border-color:var(--br);color:var(--t1);background:var(--s3)}
+
+/* ── Badge ── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:5px;font-size:13px;letter-spacing:.04em}
+.badge-red{background:var(--red-d);color:var(--red)}
+.badge-blue{background:var(--blue-d);color:var(--blue)}
+.badge-amber{background:var(--accent-d);color:var(--accent)}
+
+/* ── Info card ── */
+.info-card{background:var(--s1);border:1px solid var(--br);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:18px;animation:fadeIn .2s ease}
+.info-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--s3)}
+.info-body{padding:16px 18px}
+.info-title{font-size:16px;color:var(--t1);margin-bottom:8px;line-height:1.4;font-weight:500}
+.info-meta{display:flex;gap:14px;flex-wrap:wrap}
+.info-meta-item{font-size:13px;color:var(--t2)}
+
+/* ── Format picker ── */
+.format-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+.format-btn{padding:12px 6px;text-align:center;border:1px solid var(--br);border-radius:var(--radius);cursor:pointer;transition:all .15s;background:var(--s1);min-height:60px}
+.format-btn input{display:none}
+.format-btn:hover{border-color:var(--br2)}
+.format-btn.selected{border-color:var(--accent);background:var(--accent-d)}
+.format-btn .fmt-label{font-size:14px;color:var(--t1);display:block;margin-bottom:3px;font-weight:500}
+.format-btn .fmt-desc{font-size:12px;color:var(--t2)}
+.format-btn.selected .fmt-label{color:var(--accent)}
+
+/* ── Drop zone ── */
+.drop-zone{border:1px dashed var(--br2);border-radius:var(--radius-lg);padding:44px 20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--s1)}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:var(--accent-d)}
+.drop-icon{font-size:36px;margin-bottom:14px;color:var(--t3)}
+.drop-title{font-size:16px;color:var(--t2);margin-bottom:6px}
+.drop-sub{font-size:13px;color:var(--t3)}
+
+/* ── Video player ── */
+.player-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--t3);gap:14px;padding:40px}
+.player-empty-icon{font-size:52px;opacity:.25}
+.player-empty-text{font-size:14px;text-align:center;line-height:1.7}
+.video-wrap{position:relative;background:#000}
+video{width:100%;display:block;max-height:55vh;object-fit:contain;background:#000}
+.speed-panel{padding:22px 26px;border-top:1px solid var(--br);flex-shrink:0}
+.speed-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.speed-label{font-size:12px;color:var(--t3);letter-spacing:.1em}
+.speed-value{font-size:32px;font-family:var(--display);letter-spacing:.05em;color:var(--t1)}
+.speed-value span{font-size:18px;color:var(--t2);font-family:var(--mono)}
+.preset-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.preset{padding:8px 14px;border:1px solid var(--br);border-radius:var(--radius);font-family:var(--mono);font-size:13px;cursor:pointer;background:transparent;color:var(--t2);transition:all .15s;min-height:40px}
+.preset:hover{border-color:var(--br2);color:var(--t1)}
+.preset.active{border-color:var(--accent);background:var(--accent-d);color:var(--accent)}
+.slider-labels{display:flex;justify-content:space-between;margin-top:8px}
+.slider-labels span{font-size:12px;color:var(--t3)}
+.player-actions{display:flex;gap:10px;padding:14px 26px;border-top:1px solid var(--br);flex-shrink:0}
+
+/* ── Progress ── */
+.progress-wrap{display:none;margin-bottom:14px}
+.progress-bar{height:4px;background:var(--s3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;width:0%;transition:width .3s}
+.progress-label{font-size:13px;color:var(--t2);margin-top:7px}
+
+/* ── Settings bar ── */
+.settings-row{display:flex;align-items:center;gap:8px}
+.settings-input{flex:1;background:var(--s2);border:1px solid var(--br);border-radius:var(--radius);color:var(--t2);font-family:var(--mono);font-size:13px;padding:7px 12px;outline:none;min-height:36px}
+.settings-input:focus{border-color:var(--accent);color:var(--t1)}
+
+/* ── Toast ── */
+.toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:999;pointer-events:none}
+.toast{background:var(--s2);border:1px solid var(--br2);border-radius:var(--radius);padding:12px 18px;font-size:14px;color:var(--t1);animation:slideUp .2s ease;max-width:300px;line-height:1.5}
+.toast.error{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.toast.success{border-color:var(--green);color:var(--green)}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--br);margin:22px 0}
+
+/* ── Animations ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .8s linear infinite}
+
+/* ── Status dot ── */
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--t3);display:inline-block;flex-shrink:0}
+.status-dot.online{background:var(--green)}
+.status-dot.offline{background:var(--red)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--br2);border-radius:3px}
+
+/* ════════════════════════════════════════════
+   MOBILE  ≤ 680px
+   ════════════════════════════════════════════ */
+@media(max-width:680px){
+
+  /* Layout: stack vertically, let page scroll */
+  .app{height:auto;min-height:100svh;grid-template-rows:56px auto;overflow:visible}
+  .main{grid-template-columns:1fr;overflow:visible}
+
+  /* Header: hide API input on mobile, show via settings */
+  .header{padding:0 16px}
+  .api-label{display:none}
+  .settings-row{display:none}
+  #refresh-btn{display:none}
+
+  /* Panels: tighter padding, no fixed height, no overflow clip */
+  .panel{padding:20px 16px;overflow:visible;border-right:none;border-bottom:1px solid var(--br)}
+  .panel-label{font-size:13px}
+
+  /* Tabs: full width */
+  .tabs{width:100%}
+  .tab{flex:1;text-align:center;font-size:15px;padding:12px 8px}
+
+  /* Format grid: 2 columns on mobile */
+  .format-grid{grid-template-columns:repeat(2,1fr)}
+
+  /* URL input row: stack vertically */
+  #url-row{flex-direction:column}
+  #url-row input{width:100%}
+  #url-row .btn{width:100%}
+
+  /* Player: not fixed height */
+  .panel-right{overflow:visible}
+  #player-loaded{height:auto}
+  video{max-height:40vh}
+
+  /* Speed panel: tighter */
+  .speed-panel{padding:16px}
+  .player-actions{padding:12px 16px}
+
+  /* Presets: wrap more tightly */
+  .preset{padding:10px 12px;font-size:14px}
+
+  /* Toast: full width bottom */
+  .toast-wrap{left:16px;right:16px;bottom:16px}
+  .toast{max-width:100%}
+
+  /* Drop zone: smaller */
+  .drop-zone{padding:32px 16px}
+}
+
+/* ════════════════════════════════════════════
+   TABLET  681px – 900px
+   ════════════════════════════════════════════ */
+@media(min-width:681px) and (max-width:900px){
+  .app{height:auto;min-height:100svh;grid-template-rows:60px auto;overflow:visible}
+  .main{grid-template-columns:1fr;overflow:visible}
+  .panel{overflow:visible;border-right:none;border-bottom:1px solid var(--br)}
+  .panel-right{overflow:visible}
+  #player-loaded{height:auto}
+  video{max-height:45vh}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header class="header">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="logo">Video<span>Kit</span></div>
+      <span style="font-size:10px;color:var(--t3);letter-spacing:.1em">v1.0</span>
+    </div>
+    <div class="header-right">
+      <span class="api-label">API</span>
+      <div class="settings-row">
+        <input class="settings-input" id="api-base" type="text" value="" placeholder="https://your-app.up.railway.app" style="width:240px">
+      </div>
+      <div id="status-dot" class="status-dot" title="後端狀態"></div>
+      <button id="refresh-btn" class="btn btn-sm btn-ghost" onclick="checkBackend()" title="重新檢查後端">↺</button>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- ── Left: Input Panel ── -->
+    <div class="panel">
+      <div class="panel-label">INPUT SOURCE</div>
+
+      <div class="tabs">
+        <button class="tab active" id="tab-url" onclick="switchTab('url')">URL 下載</button>
+        <button class="tab" id="tab-local" onclick="switchTab('local')">本地檔案</button>
+      </div>
+
+      <!-- URL Tab -->
+      <div id="pane-url">
+      <div id="url-row" style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=…"
+            oninput="onUrlInput(this.value)"
+            onkeydown="if(event.key==='Enter')getInfo()">
+          <button class="btn" onclick="getInfo()" id="info-btn">預覽</button>
+        </div>
+
+        <div id="platform-badge" style="margin-bottom:12px;display:none"></div>
+
+        <!-- Info card (appears after fetch) -->
+        <div id="info-card" style="display:none"></div>
+
+        <!-- Format picker -->
+        <div id="format-section" style="display:none">
+          <div class="panel-label" style="margin-bottom:10px">FORMAT</div>
+          <div class="format-grid">
+            <label class="format-btn selected" id="fmt-mp4">
+              <input type="radio" name="format" value="mp4" checked>
+              <span class="fmt-label">MP4</span>
+              <span class="fmt-desc">最佳畫質</span>
+            </label>
+            <label class="format-btn" id="fmt-mp4_720">
+              <input type="radio" name="format" value="mp4_720">
+              <span class="fmt-label">720p</span>
+              <span class="fmt-desc">HD</span>
+            </label>
+            <label class="format-btn" id="fmt-mp4_1080">
+              <input type="radio" name="format" value="mp4_1080">
+              <span class="fmt-label">1080p</span>
+              <span class="fmt-desc">Full HD</span>
+            </label>
+            <label class="format-btn" id="fmt-audio">
+              <input type="radio" name="format" value="audio">
+              <span class="fmt-label">MP3</span>
+              <span class="fmt-desc">音訊</span>
+            </label>
+          </div>
+
+          <div class="progress-wrap" id="dl-progress">
+            <div class="progress-bar"><div class="progress-fill" id="dl-fill"></div></div>
+            <div class="progress-label" id="dl-label">準備下載…</div>
+          </div>
+
+          <button class="btn btn-accent btn-full" id="dl-btn" onclick="downloadVideo()">
+            ↓ 下載
+          </button>
+        </div>
+
+        <!-- Warn if no info fetched -->
+        <div id="url-hint" style="margin-top:8px">
+          <p style="font-size:14px;color:var(--t3);line-height:1.9">
+            貼上 URL 後點「預覽」取得影片資訊，<br>確認後選格式再下載。<br>
+            <br>
+            <span style="color:var(--t2)">支援平台</span><br>
+            YouTube · Instagram Reels · Twitter/X · TikTok · 以及 yt-dlp 支援的 1000+ 網站
+          </p>
+        </div>
+      </div>
+
+      <!-- Local Tab -->
+      <div id="pane-local" style="display:none">
+        <div class="drop-zone" id="drop-zone"
+          onclick="document.getElementById('file-input').click()"
+          ondragover="dropOver(event)"
+          ondragleave="dropLeave(event)"
+          ondrop="dropFile(event)">
+          <div class="drop-icon">⬆</div>
+          <div class="drop-title">拖曳影片到此</div>
+          <div class="drop-sub" style="margin-bottom:12px">或點擊選取檔案</div>
+          <div class="drop-sub">MP4 · MOV · WebM · AVI · MKV</div>
+          <input type="file" id="file-input" accept="video/*" style="display:none" onchange="loadLocalFile(this.files[0])">
+        </div>
+
+        <div id="local-info" style="display:none;margin-top:16px">
+          <div class="info-card" style="margin-bottom:0">
+            <div class="info-body">
+              <div class="info-title" id="local-filename" style="word-break:break-all"></div>
+              <div class="info-meta">
+                <span class="info-meta-item" id="local-size"></span>
+                <span class="info-meta-item" id="local-type"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider + Notes -->
+      <div class="divider"></div>
+      <div id="notes-section" style="display:none">
+        <div class="panel-label">NOTES</div>
+        <div id="notes-content" style="font-size:14px;color:var(--t2);line-height:1.8"></div>
+      </div>
+    </div>
+
+    <!-- ── Right: Player Panel ── -->
+    <div class="panel-right" style="display:flex;flex-direction:column;overflow:hidden;background:var(--bg)">
+
+      <div id="player-empty" class="player-empty" style="flex:1">
+        <div class="player-empty-icon">▶</div>
+        <div class="player-empty-text">
+          載入影片後<br>播放器會出現在這裡
+        </div>
+      </div>
+
+      <div id="player-loaded" style="display:none;flex-direction:column;height:100%">
+        <div class="video-wrap" style="flex-shrink:0">
+          <video id="video" controls preload="metadata"></video>
+        </div>
+
+        <div style="overflow-y:auto;flex:1">
+          <!-- File info bar -->
+          <div style="padding:12px 24px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:14px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1" id="player-filename"></div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-sm btn-ghost" onclick="document.getElementById(activeTab==='url'?'info-btn':'file-input').click()">교체</button>
+            </div>
+          </div>
+
+          <!-- Speed control -->
+          <div class="speed-panel">
+            <div class="speed-header">
+              <span class="speed-label">PLAYBACK SPEED</span>
+              <div>
+                <span class="speed-value" id="speed-val">1.00</span>
+                <span class="speed-value" style="font-size:18px;color:var(--t2);font-family:var(--mono)">x</span>
+              </div>
+            </div>
+
+            <div class="preset-row" id="preset-row"></div>
+
+            <input type="range" id="speed-slider" min="0.1" max="4" step="0.05" value="1"
+              oninput="setSpeed(parseFloat(this.value),false)">
+            <div class="slider-labels">
+              <span>0.1×</span><span>1×</span><span>2×</span><span>4×</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="player-actions">
+          <button class="btn btn-full" onclick="downloadLocalBlob()">↓ 下載此影片</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let activeTab    = 'url';
+let blobUrl      = null;
+let blobFilename = '';
+const SPEEDS     = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const NOTES      = {
+  youtube:   '如遇 Bot 偵測錯誤，在後端加入瀏覽器 cookies 可解決。',
+  instagram: 'Instagram 私人帳號或限時動態需要提供帳戶 cookies。',
+  tiktok:    'TikTok 部分地區需使用 cookies 繞過地區限制。',
+};
+
+function apiBase() {
+  const val = document.getElementById('api-base').value.trim().replace(/\/$/, '');
+  if (!val) throw new Error('請先在右上角填入後端 URL（Railway 部署後的網址）');
+  return val;
+}
+
+// ── Backend health check ───────────────────────────────────────────────────────
+async function checkBackend() {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot';
+  let base;
+  try { base = apiBase(); } catch { return; }
+  try {
+    const r = await fetch(`${base}/health`, {signal: AbortSignal.timeout(3000)});
+    dot.className = r.ok ? 'status-dot online' : 'status-dot offline';
+  } catch {
+    dot.className = 'status-dot offline';
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  ['url','local'].forEach(t => {
+    document.getElementById(`pane-${t}`).style.display    = t===tab ? 'block' : 'none';
+    document.getElementById(`tab-${t}`).classList.toggle('active', t===tab);
+  });
+}
+
+// ── URL flow ──────────────────────────────────────────────────────────────────
+let detectedPlatform = null;
+
+function onUrlInput(val) {
+  const badge = document.getElementById('platform-badge');
+  const hint  = document.getElementById('url-hint');
+  const fmt   = document.getElementById('format-section');
+  const card  = document.getElementById('info-card');
+
+  // Reset
+  badge.style.display = 'none';
+  fmt.style.display   = 'none';
+  card.style.display  = 'none';
+  hint.style.display  = 'block';
+  detectedPlatform    = null;
+  document.getElementById('notes-section').style.display = 'none';
+
+  if (!val.trim()) return;
+
+  let platform = null, cls = 'badge-amber';
+  if (/youtube\.com|youtu\.be/.test(val))   { platform = 'YouTube';   cls = 'badge-red';  detectedPlatform = 'youtube'; }
+  else if (/instagram\.com/.test(val))       { platform = 'Instagram'; cls = 'badge-blue'; detectedPlatform = 'instagram'; }
+  else if (/tiktok\.com/.test(val))          { platform = 'TikTok';   cls = 'badge-amber';detectedPlatform = 'tiktok'; }
+  else if (/twitter\.com|x\.com/.test(val)) { platform = 'X / Twitter'; cls = 'badge-amber'; }
+
+  if (platform) {
+    badge.style.display = 'inline-flex';
+    badge.innerHTML = `<span class="badge ${cls}">● ${platform} 偵測到</span>`;
+  }
+}
+
+async function getInfo() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { toast('請先貼上 URL', 'error'); return; }
+
+  const btn = document.getElementById('info-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">↻</span> 讀取中…';
+
+  try {
+    const res = await fetch(`${apiBase()}/api/info`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url}),
+    });
+    if (!res.ok) {
+      const e = await res.json();
+      throw new Error(e.detail || `HTTP ${res.status}`);
+    }
+    const info = await res.json();
+    renderInfoCard(info);
+    document.getElementById('format-section').style.display = 'block';
+    document.getElementById('url-hint').style.display = 'none';
+
+    if (detectedPlatform && NOTES[detectedPlatform]) {
+      document.getElementById('notes-section').style.display = 'block';
+      document.getElementById('notes-content').textContent = NOTES[detectedPlatform];
+    }
+  } catch (e) {
+    toast(`預覽失敗：${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '預覽';
+  }
+}
+
+function renderInfoCard(info) {
+  const dur = info.duration ? formatDuration(info.duration) : '—';
+  const card = document.getElementById('info-card');
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="info-card">
+      ${info.thumbnail ? `<img class="info-thumb" src="${info.thumbnail}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+      <div class="info-body">
+        <div class="info-title">${escHtml(info.title || 'Untitled')}</div>
+        <div class="info-meta">
+          ${info.uploader ? `<span class="info-meta-item">↳ ${escHtml(info.uploader)}</span>` : ''}
+          ${dur !== '—' ? `<span class="info-meta-item">⏱ ${dur}</span>` : ''}
+          ${info.platform ? `<span class="info-meta-item badge badge-amber" style="padding:2px 8px">${escHtml(info.platform)}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+// Format selector
+document.querySelectorAll('.format-btn').forEach(label => {
+  label.addEventListener('click', () => {
+    document.querySelectorAll('.format-btn').forEach(l => l.classList.remove('selected'));
+    label.classList.add('selected');
+  });
+});
+
+async function downloadVideo() {
+  const url = document.getElementById('url-input').value.trim();
+  const fmt = document.querySelector('input[name=format]:checked')?.value || 'mp4';
+  if (!url) return;
+
+  const btn   = document.getElementById('dl-btn');
+  const prog  = document.getElementById('dl-progress');
+  const fill  = document.getElementById('dl-fill');
+  const label = document.getElementById('dl-label');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">↻</span> 下載中…';
+  prog.style.display = 'block';
+  fill.style.width = '30%';
+  label.textContent = '連線後端中…';
+
+  try {
+    const res = await fetch(`${apiBase()}/api/download`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url, format: fmt}),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || `HTTP ${res.status}`);
+    }
+
+    fill.style.width = '70%';
+    label.textContent = '接收資料中…';
+
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";\n]+)"?/);
+    const filename = match ? decodeURIComponent(match[1]) : `video.${fmt === 'audio' ? 'mp3' : 'mp4'}`;
+
+    const blob = await res.blob();
+    fill.style.width = '100%';
+    label.textContent = '完成！';
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    toast('下載完成 ✓', 'success');
+  } catch (e) {
+    toast(`下載失敗：${e.message}`, 'error');
+    fill.style.width = '0%';
+    label.textContent = '下載失敗';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↓ 下載';
+    setTimeout(() => { prog.style.display = 'none'; fill.style.width = '0%'; }, 2000);
+  }
+}
+
+// ── Local file flow ───────────────────────────────────────────────────────────
+function dropOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+function dropLeave(e){ document.getElementById('drop-zone').classList.remove('drag-over'); }
+function dropFile(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('video/')) loadLocalFile(f);
+  else toast('請選取影片檔案', 'error');
+}
+
+function loadLocalFile(file) {
+  if (!file) return;
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl      = URL.createObjectURL(file);
+  blobFilename = file.name;
+
+  // Info row
+  document.getElementById('local-info').style.display = 'block';
+  document.getElementById('local-filename').textContent = file.name;
+  document.getElementById('local-size').textContent = formatBytes(file.size);
+  document.getElementById('local-type').textContent = file.type || '—';
+
+  loadPlayer(blobUrl, file.name);
+}
+
+// ── Player ────────────────────────────────────────────────────────────────────
+function loadPlayer(src, label) {
+  const video = document.getElementById('video');
+  video.src = src;
+  document.getElementById('player-empty').style.display = 'none';
+  document.getElementById('player-loaded').style.display = 'flex';
+  document.getElementById('player-filename').textContent = label || src;
+  video.playbackRate = parseFloat(document.getElementById('speed-slider').value);
+}
+
+function setSpeed(raw, updateSlider=true) {
+  const s = Math.round(raw * 100) / 100;
+  const v = document.getElementById('video');
+  if (v.src) v.playbackRate = s;
+  document.getElementById('speed-val').textContent = s.toFixed(2);
+  if (updateSlider) document.getElementById('speed-slider').value = s;
+
+  document.querySelectorAll('.preset').forEach(b => {
+    b.classList.toggle('active', Math.abs(parseFloat(b.dataset.s) - s) < 0.01);
+  });
+}
+
+function downloadLocalBlob() {
+  if (!blobUrl) return;
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = blobFilename || 'video.mp4';
+  a.click();
+}
+
+// Init presets
+const row = document.getElementById('preset-row');
+SPEEDS.forEach(s => {
+  const b = document.createElement('button');
+  b.className = 'preset' + (s===1?' active':'');
+  b.dataset.s = s;
+  b.textContent = s + '×';
+  b.onclick = () => { setSpeed(s); document.getElementById('speed-slider').value = s; };
+  row.appendChild(b);
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatDuration(sec) {
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+}
+function formatBytes(b) {
+  if (b < 1024) return b+'B';
+  if (b < 1024**2) return (b/1024).toFixed(1)+'KB';
+  return (b/1024**2).toFixed(1)+'MB';
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toast(msg, type='') {
+  const wrap = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (type?' '+type:'');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkBackend();
+// Re-check when API base changes
+document.getElementById('api-base').addEventListener('change', checkBackend);
+</script>
+</body>
+</html>
