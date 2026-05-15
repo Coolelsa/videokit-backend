@@ -227,6 +227,7 @@ footer{border-top:1px solid var(--br);padding:20px 0 28px;margin-top:auto}
     <div class="brow" style="margin-top:20px" id="ub">
       <button class="btn btn-gold" onclick="gi()" id="ib">預覽影片</button>
     </div>
+    <div id="err-box" style="display:none;margin-top:12px;background:var(--redd);border:1.5px solid var(--red);border-radius:var(--r);padding:14px 16px;font-size:14px;color:var(--red);font-weight:700;line-height:1.7;word-break:break-all"></div>
   </section>
 
   <footer>
@@ -242,7 +243,7 @@ footer{border-top:1px solid var(--br);padding:20px 0 28px;margin-top:auto}
 <div class="tw" id="tw"></div>
 
 <script>
-const BACKEND_URL = "https://coolelsa-videokit-backend.hf.space"; // ← 換成你的space URL
+const BACKEND_URL = "https://coolelsa-videokit-backend.hf.space"; // ← 換成你的 URL
 
 let burl=null, bname='';
 const SPEEDS=[0.25,0.5,0.75,1,1.25,1.5,2,3];
@@ -299,10 +300,30 @@ async function gi(){
   const url=document.getElementById('ui').value.trim();
   if(!url){toast('請先貼上 URL','error');return;}
   const btn=document.getElementById('ib');
-  btn.disabled=true;btn.innerHTML='<span class="spin">↻</span> 讀取中…';
+  const errBox=document.getElementById('err-box');
+  errBox.style.display='none';
+  btn.disabled=true;
+  btn.innerHTML='<span class="spin">↻</span> 喚醒後端…';
+
+  // 先 ping health，確認後端在線
   try{
-    const res=await fetch(`${api()}/api/info`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
-    if(!res.ok){const e=await res.json();throw new Error(e.detail||`HTTP ${res.status}`);}
+    await fetch(`${api()}/health`,{signal:AbortSignal.timeout(10000)});
+  }catch(e){
+    errBox.style.display='block';
+    errBox.textContent='⚠ 後端未回應（'+api()+'）\n請確認 Hugging Face Space 是否 Running。';
+    btn.disabled=false;btn.textContent='預覽影片';return;
+  }
+
+  btn.innerHTML='<span class="spin">↻</span> 讀取影片資訊…';
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),60000);
+  try{
+    const res=await fetch(`${api()}/api/info`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url}),signal:controller.signal
+    });
+    clearTimeout(timer);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`伺服器錯誤 HTTP ${res.status}`);}
     const info=await res.json();
     const dur=info.duration?fmtD(info.duration):'—';
     document.getElementById('ic').innerHTML=`<div class="icard">${info.thumbnail?`<img class="ithumb" src="${info.thumbnail}" alt="" onerror="this.style.display='none'">`:''}
@@ -312,8 +333,13 @@ async function gi(){
     document.getElementById('uh').style.display='none';
     document.getElementById('ub').style.display='none';
     if(plat&&NOTES[plat]){const n=document.getElementById('nb2');n.style.display='block';n.textContent='⚠ '+NOTES[plat];}
-  }catch(e){toast(`預覽失敗：${e.message}`,'error');}
-  finally{btn.disabled=false;btn.textContent='預覽影片';}
+  }catch(e){
+    clearTimeout(timer);
+    const msg=e.name==='AbortError'?'逾時（60秒無回應），yt-dlp 可能正在處理中，稍後再試':e.message;
+    errBox.style.display='block';
+    errBox.textContent='❌ 預覽失敗：'+msg;
+    toast(msg,'error',8000);
+  }finally{btn.disabled=false;btn.textContent='預覽影片';}
 }
 
 document.querySelectorAll('.fb').forEach(l=>l.addEventListener('click',()=>{document.querySelectorAll('.fb').forEach(x=>x.classList.remove('sel'));l.classList.add('sel');}));
@@ -328,31 +354,75 @@ async function dlV(){
   try{
     const res=await fetch(`${api()}/api/download`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,format:fmt})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${res.status}`);}
-    df.style.width='70%';dl.textContent='接收中…';
+    btn.textContent='接收中…';
     const disp=res.headers.get('Content-Disposition')||'';
     const m=disp.match(/filename="?([^";\n]+)"?/);
     const fn=m?decodeURIComponent(m[1]):`video.${fmt==='audio'?'mp3':'mp4'}`;
     const blob=await res.blob();
     df.style.width='100%';dl.textContent='完成！';
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fn;a.click();URL.revokeObjectURL(a.href);
-    toast('下載完成 ✓','success');
+    await saveFile(blob, fn, fmt==='audio'?'audio/mpeg':'video/mp4');
   }catch(e){toast(`下載失敗：${e.message}`,'error');df.style.width='0%';dl.textContent='失敗';}
   finally{btn.disabled=false;btn.textContent='↓ 下載';setTimeout(()=>{dp.style.display='none';df.style.width='0%';},2500);}
 }
 
+// ── 存檔：優先跳出「另存新檔」對話框 ──────────────────────────────────────
+async function saveFile(blob, filename, mimeType) {
+  // 桌機/Android Chrome：跳出「另存新檔」對話框
+  if ('showSaveFilePicker' in window) {
+    try {
+      const ext    = filename.split('.').pop();
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: '影片檔案', accept: { [mimeType]: ['.'+ext] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      toast('儲存完成 ✓', 'success');
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+
+  // iOS：用分享選單（可選「存到相簿」或「存到檔案」）
+  const file = new File([blob], filename, { type: mimeType });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+
+  // Fallback：自動下載
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  toast('已下載 → 開「檔案 App」→「下載項目」', 'success');
+}
+
 function fmtD(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`:`${m}:${String(ss).padStart(2,'0')}`;}
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function toast(msg,type=''){const w=document.getElementById('tw');const t=document.createElement('div');t.className='toast'+(type?' '+type:'');t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500);}
+function toast(msg,type='',dur=5000){
+  const w=document.getElementById('tw');
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  t.textContent=msg;
+  w.appendChild(t);
+  setTimeout(()=>t.remove(),dur);
+}
 
 async function dlBlob() {
   if (!burl) { toast('請先載入影片', 'error'); return; }
   const speed = parseFloat(document.getElementById('ss').value);
   const btn   = document.getElementById('spd-dl-btn');
 
-  // 1× — 直接下載原檔，不需後端
   if (Math.abs(speed - 1) < 0.01) {
-    const a = document.createElement('a');
-    a.href = burl; a.download = bname || 'video.mp4'; a.click();
+    const blob = await fetch(burl).then(r => r.blob());
+    await saveFile(blob, bname || 'video.mp4', 'video/mp4');
     return;
   }
 
@@ -370,15 +440,10 @@ async function dlBlob() {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.detail || `HTTP ${res.status}`);
     }
-
     btn.textContent = '下載中…';
     const blob = await res.blob();
     const base = (bname || 'video').replace(/\.[^.]+$/, '');
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${base}_${speed}x.mp4`; a.click();
-    URL.revokeObjectURL(url);
-    toast('下載完成 ✓', 'success');
+    await saveFile(blob, `${base}_${speed}x.mp4`, 'video/mp4');
   } catch (e) {
     toast(`失敗：${e.message}`, 'error');
   } finally {
